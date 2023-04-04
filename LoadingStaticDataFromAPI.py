@@ -105,10 +105,9 @@ def getAvalibilities():
         logger.warning(e)
 
 
-def getOriginalFacilities():
-    logger.info('Extrating facilities original data from file: ' + LOCATIONS)
+def getOriginalFacilities(availablities):
+    logger.info('Extracting facilities original data from file: ' + LOCATIONS)
     try:
-        availablities = getAvalibilities()
         locationList = locations.filter(
             items=['Location ID', 'Location Name', 'District', 'Street No', 'Street No Suffix', 'Street Name', 'Street Type', 'Postal Code']).values.tolist()
 
@@ -450,7 +449,7 @@ def run():
     try:
         getResourses()
         availabilities = getAvalibilities()
-        facilities = getOriginalFacilities()
+        facilities = getOriginalFacilities(availabilities)
         facilities = getGeoToFacilities(facilities)
         facilities = getPhoneUrlToFacilities(facilities)
         saveStaticDataToDB(availabilities, facilities)
