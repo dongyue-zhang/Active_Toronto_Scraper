@@ -35,13 +35,13 @@ def getResourses():
     global dropins, facilities, locations, registeredPrograms
     params = {'key': 'value'}
 
-    logging.info('Requesting resourses from City of Toronto OpenAPI: ' + RESOURSE_API)
+    logger.info('Requesting resourses from City of Toronto OpenAPI: ' + RESOURSE_API)
     try:
         r = requests.get(url=RESOURSE_API, params=params)
         response = r.json()
     except (ConnextionError, Exception) as e:
-        logging.warning(('Could not get resourses from {}:'.format(RESOURSE_API)))
-        logging.warning(e)
+        logger.warning(('Could not get resourses from {}:'.format(RESOURSE_API)))
+        logger.warning(e)
 
     try:
         resoursesJSON = response['result']['resources']
@@ -51,11 +51,11 @@ def getResourses():
             url = resourseJSON['url']
 
             if resourseJSON['name'] in [DROPIN, FACILITIES, REGISTERED_PROGRAMS]:
-                logging.info('Getting sourse file: ' + resourseJSON['name'])
+                logger.info('Getting sourse file: ' + resourseJSON['name'])
                 content = requests.get(url=url, params=params).json()
                 resourses[name] = content
             elif resourseJSON['name'] == LOCATIONS:
-                logging.info('Getting sourse file: ' + resourseJSON['name'])
+                logger.info('Getting sourse file: ' + resourseJSON['name'])
                 csv = requests.get(url=url, params=params).content
                 locations = pd.read_csv(io.StringIO(
                     csv.decode('utf-8')), sep=',', header=0)
@@ -65,11 +65,11 @@ def getResourses():
         facilities = resourses[FACILITIES]
         registeredPrograms = resourses[REGISTERED_PROGRAMS]
     except (Exception) as e:
-        logging.warning(e)
+        logger.warning(e)
 
 
 def getAvalibilities():
-    logging.info('Extracting avalibilities from file: ' + DROPIN)
+    logger.info('Extracting avalibilities from file: ' + DROPIN)
     try:
         avalibilities = []
         for dropin in dropins:
@@ -102,11 +102,11 @@ def getAvalibilities():
         sorted(avalibilities, key=lambda x: x['category'])
         return avalibilities
     except (Exception) as e:
-        logging.warning(e)
+        logger.warning(e)
 
 
 def getOriginalFacilities():
-    logging.info('Extrating facilities original data from file: ' + LOCATIONS)
+    logger.info('Extrating facilities original data from file: ' + LOCATIONS)
     try:
         availablities = getAvalibilities()
         locationList = locations.filter(
@@ -128,14 +128,14 @@ def getOriginalFacilities():
 
         return locationsNoGeo
     except (Exception) as e:
-        logging.warning(e)
+        logger.warning(e)
 
 
 def getGeoToFacilities(facilities):
-    logging.info('Start getting coordinations for facilities...')
+    logger.info('Start getting coordinations for facilities...')
     try:
         for facility in facilities:
-            logging.info('Getting latitude and longitude for facility: ' + facility['facility_name'])
+            logger.info('Getting latitude and longitude for facility: ' + facility['facility_name'])
             addressStr = facility['street'] + ' ' + facility['city'] + ' ' + facility['province']
             addressStr = addressStr.replace(' ', '%20')
             url = GOOGLE_API_URL + addressStr + '&key=' + GOOGLE_API_KEY
@@ -149,14 +149,14 @@ def getGeoToFacilities(facilities):
                 facility['postal_code'] = response['results'][0]['address_components'][-1]['short_name']
         return facilities
     except (Exception) as e:
-        logging.error(e)
+        logger.error(e)
 
 
 def getPhoneUrlToFacilities(facilities):
-    logging.info('Start getting phone numbers and urls for facilities...')
+    logger.info('Start getting phone numbers and urls for facilities...')
     try:
         # get recreation list
-        logging.info('Getting recreation list from {}'.format(FACILITY_LIST_URL))
+        logger.info('Getting recreation list from {}'.format(FACILITY_LIST_URL))
         option = webdriver.ChromeOptions()
         option.add_argument('headless')
         driver = webdriver.Chrome(options=option)
@@ -177,12 +177,12 @@ def getPhoneUrlToFacilities(facilities):
 
         # if a facility is not on the list, get phone number from its website
         for facility in facilities:
-            logging.info('Getting phone number and urls for facility: ' + facility['facility_name'])
+            logger.info('Getting phone number and urls for facility: ' + facility['facility_name'])
             for phone in phoneList:
                 if facility['facility_name'] == phone['Name']:
                     facility['phone'] = phone['phone']
                     facility['url'] = phone['url']
-                    logging.info('Got phone number for' + facility['facility_name'])
+                    logger.info('Got phone number for' + facility['facility_name'])
                     break
 
             if facility['phone'] is None:
@@ -194,12 +194,12 @@ def getPhoneUrlToFacilities(facilities):
                 li = soup.find('div', attrs={'id': 'pfr_complex_loc'}).find('ul').find('li')
                 if 'Phone' in li.text.strip():
                     facility['phone'] = li.text.strip().split(':')[1].strip()
-                    logging.info('Got phone number for' + facility['facility_name'])
+                    logger.info('Got phone number for' + facility['facility_name'])
 
         sorted(facilities, key=lambda x: x['location_id'])
         return facilities
     except (Exception) as e:
-        logging.warning(e)
+        logger.warning(e)
 
 
 def saveStaticDataToDB(availablities, facilities):
@@ -242,7 +242,7 @@ def saveStaticDataToDB(availablities, facilities):
     ADDRESS_SQL = 'INSERT INTO `address` ( `STREET_TRANSLATION_ID`, `CITY`, `PROVINCE`, `POSTAL_CODE`, `COUNTRY`, `LATITUDE`, `LONGITUDE`) VALUES (%s, %s, %s, %s, %s, %s, %s);'
     FACILITY_SQL = 'INSERT INTO `facility` (`PHONE`, `ADDRESS_ID`, `TITLE_TRANSLATION_ID`, `URL`, `CITY_ID`) VALUES (%s, %s, %s, %s, %s);'
 
-    logging.info('Connecting to MySQL...')
+    logger.info('Connecting to MySQL...')
     try:
         mydb = MySQL.connect(
             host=HOST,
@@ -276,36 +276,36 @@ def saveStaticDataToDB(availablities, facilities):
                 # insert a new row into Table Translation
                 translation_id = executeInsertSQL(TRANSLATION_SQL, None, mydb)
                 row_affected_traslation += 1
-                logging.info('Inserted a new Translation: ' + str(translation_id))
+                logger.info('Inserted a new Translation: ' + str(translation_id))
 
                 # insert a new row into Table Language_Translation
                 language_translation_val = (translation_id, language_id, street)
                 executeInsertSQL(LANGUAGE_TRANSLATION_SQL, language_translation_val, mydb)
                 row_affected_language_traslation += 1
-                logging.info('Inserted a new Language_Translation: ' + street)
+                logger.info('Inserted a new Language_Translation: ' + street)
 
                 # insert a new row into Table Address
                 address_val = (translation_id, city, province, postal_code, country, lat, lng)
                 address_id = executeInsertSQL(ADDRESS_SQL, address_val, mydb)
                 row_affected_address += 1
-                logging.info('Inserted a new Address: ' + str(address_id))
+                logger.info('Inserted a new Address: ' + str(address_id))
 
                 # insert a new row into Table Translation
                 translation_id = executeInsertSQL(TRANSLATION_SQL, None, mydb)
                 row_affected_traslation += 1
-                logging.info('Inserted a new Translation: ' + str(translation_id))
+                logger.info('Inserted a new Translation: ' + str(translation_id))
 
                 # insert a new row into Table Language_Translation
                 language_translation_val = (translation_id, language_id, facility_name)
                 executeInsertSQL(LANGUAGE_TRANSLATION_SQL, language_translation_val, mydb)
                 row_affected_language_traslation += 1
-                logging.info('Inserted a new Language_Translation: ' + facility_name)
+                logger.info('Inserted a new Language_Translation: ' + facility_name)
 
                 # insert a new row into Table Facility
                 facility_val = (phone, address_id, translation_id, url, city_id)
                 facility_id = executeInsertSQL(FACILITY_SQL, facility_val, mydb)
                 row_affected_facility += 1
-                logging.info('Inserted a new Facility: ' + str(facility_id))
+                logger.info('Inserted a new Facility: ' + str(facility_id))
 
                 facility = facility_current
 
@@ -314,19 +314,19 @@ def saveStaticDataToDB(availablities, facilities):
                 # insert a new row into Table Translation
                 translation_id = executeInsertSQL(TRANSLATION_SQL, None, mydb)
                 row_affected_traslation += 1
-                logging.info('Inserted a new Translation: ' + str(translation_id))
+                logger.info('Inserted a new Translation: ' + str(translation_id))
 
                 # insert a new row into Table Languge_Translation
                 language_translation_val = (translation_id, language_id, category_current)
                 executeInsertSQL(LANGUAGE_TRANSLATION_SQL, language_translation_val, mydb)
                 row_affected_language_traslation += 1
-                logging.info('Inserted a new Language_Translation: ' + category_current)
+                logger.info('Inserted a new Language_Translation: ' + category_current)
 
                 # insert a new row into Table Category
                 category_val = (city_id, translation_id)
                 category_id = executeInsertSQL(CATEGORY_SQL, category_val, mydb)
                 row_affected_categoty += 1
-                logging.info('Inserted a new Category: ' + str(category_id) + '(' + category_current + ')')
+                logger.info('Inserted a new Category: ' + str(category_id) + '(' + category_current + ')')
 
                 category = category_current
 
@@ -335,19 +335,19 @@ def saveStaticDataToDB(availablities, facilities):
                 # insert a new row into Table Translation
                 translation_id = executeInsertSQL(TRANSLATION_SQL, None, mydb)
                 row_affected_traslation += 1
-                logging.info('Inserted a new Translation: ' + str(translation_id))
+                logger.info('Inserted a new Translation: ' + str(translation_id))
 
                 # insert a new row into Table Languge_Translation
                 language_translation_val = (translation_id, language_id, type_current)
                 executeInsertSQL(LANGUAGE_TRANSLATION_SQL, language_translation_val, mydb)
                 row_affected_language_traslation += 1
-                logging.info('Inserted a new Language_Translation: ' + type_current)
+                logger.info('Inserted a new Language_Translation: ' + type_current)
 
                 # insert a new row into Table Type
                 type_val = (category_id, translation_id)
                 type_id = executeInsertSQL(TYPE_SQL, type_val, mydb)
                 row_affected_type += 1
-                logging.info('Inserted a new Type: ' + str(type_id) + '(' + type_current + ')')
+                logger.info('Inserted a new Type: ' + str(type_id) + '(' + type_current + ')')
 
                 type = type_current
 
@@ -356,25 +356,25 @@ def saveStaticDataToDB(availablities, facilities):
                 # insert a new row into Table Translation
                 translation_id = executeInsertSQL(TRANSLATION_SQL, None, mydb)
                 row_affected_traslation += 1
-                logging.info('Inserted a new Translation: ' + str(translation_id))
+                logger.info('Inserted a new Translation: ' + str(translation_id))
 
                 # insert a new row into Table Languge_Translation
                 language_translation_val = (translation_id, language_id, activity_current)
                 executeInsertSQL(LANGUAGE_TRANSLATION_SQL, language_translation_val, mydb)
                 row_affected_language_traslation += 1
-                logging.info('Inserted a new Language_Translation: ' + activity_current)
+                logger.info('Inserted a new Language_Translation: ' + activity_current)
 
                 # insert a new row into Table Activity
                 activity_val = (type_id, translation_id)
                 activity_id = executeInsertSQL(ACTIVITY_SQL, activity_val, mydb)
                 row_affected_activity += 1
-                logging.info('Inserted a new Activity: ' + str(activity_id) + '(' + activity_current + ')')
+                logger.info('Inserted a new Activity: ' + str(activity_id) + '(' + activity_current + ')')
 
                 # insert a new row into Table Activity_Facility
                 activity_facility_val = (facility_id, activity_id)
                 executeInsertSQL(ACTIVITY_FACILITY_SQL, activity_facility_val, mydb)
                 row_affected_activity_facility += 1
-                logging.info('Inserted a new Activity_Facility: ' + str(facility_id) + '-' + str(activity_id))
+                logger.info('Inserted a new Activity_Facility: ' + str(facility_id) + '-' + str(activity_id))
 
                 activity = activity_current
 
@@ -387,22 +387,22 @@ def saveStaticDataToDB(availablities, facilities):
             availability_val = (facility_id, activity_id, start_time, end_time, age_min, age_max)
             availability_id = executeInsertSQL(AVAILABILITY_SQL, availability_val, mydb)
             row_affected_availability += 1
-            logging.info('Inserted a new Availability: ' + str(availability_id) + '(' + start_time + '-' + end_time + ')')
+            logger.info('Inserted a new Availability: ' + str(availability_id) + '(' + start_time + '-' + end_time + ')')
 
         mydb.commit()
-        logging.info('Inserted into Translation ' + str(row_affected_traslation) + ' rows')
-        logging.info('Inserted into Language_Translation ' + str(row_affected_language_traslation) + ' rows')
-        logging.info('Inserted into Address ' + str(row_affected_address) + ' rows')
-        logging.info('Inserted into Facility ' + str(row_affected_facility) + ' rows')
-        logging.info('Inserted into Category ' + str(row_affected_categoty) + ' rows')
-        logging.info('Inserted into Type ' + str(row_affected_type) + ' rows')
-        logging.info('Inserted into Activity ' + str(row_affected_activity) + ' rows')
-        logging.info('Inserted into Activity_Facility ' + str(row_affected_activity_facility) + ' rows')
-        logging.info('Inserted into Availability ' + str(row_affected_availability) + ' rows')
+        logger.info('Inserted into Translation ' + str(row_affected_traslation) + ' rows')
+        logger.info('Inserted into Language_Translation ' + str(row_affected_language_traslation) + ' rows')
+        logger.info('Inserted into Address ' + str(row_affected_address) + ' rows')
+        logger.info('Inserted into Facility ' + str(row_affected_facility) + ' rows')
+        logger.info('Inserted into Category ' + str(row_affected_categoty) + ' rows')
+        logger.info('Inserted into Type ' + str(row_affected_type) + ' rows')
+        logger.info('Inserted into Activity ' + str(row_affected_activity) + ' rows')
+        logger.info('Inserted into Activity_Facility ' + str(row_affected_activity_facility) + ' rows')
+        logger.info('Inserted into Availability ' + str(row_affected_availability) + ' rows')
         mydb.close()
-        logging.info('Database disconnected')
+        logger.info('Database disconnected')
     except Exception as e:
-        logging.warning(e)
+        logger.warning(e)
 
 
 def executeInsertSQL(sql: str, val: dict, db: MySQL.MySQLConnection):
@@ -420,23 +420,33 @@ def writeListToTxt(filename, mode, list):
             fp.write('%s\n' % item)
 
 
-def setupLogging():
+def setuplogger():
+    global logger
     parser = argparse.ArgumentParser()
     parser.add_argument('-log',
                         '--loglevel',
-                        default='warning',
-                        help='Provide logging level. Example --loglevel debug, default=warning')
+                        default='debug',
+                        help='Provide logging level. Example --loglevel debug, default=debug')
     args = parser.parse_args()
+    logger = logging.getLogger()
+    logger.setLevel(args.loglevel.upper())
 
-    logging.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s',
-                        level=args.loglevel.upper(),
-                        datefmt='%Y-%m-%d %H:%M:%S')
-    logging.info('Logging now setup.')
+    formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s', '%Y-%m-%d %H:%M:%S')
+    file_handler = logging.FileHandler('logs.log')
+    file_handler.setFormatter(formatter)
+    # logger.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s',
+    #                    level=args.loglevel.upper(),
+    #                    datefmt='%Y-%m-%d %H:%M:%S')
+    logger.info('logger now setup.')
+
+    # file_handler.setLevel(logger.DEBUG)
+    # file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
 
 
 def run():
-    setupLogging()
-    logging.info('Start running Active-Toronto Scraper...')
+    setuplogger()
+    logger.info('Start running Active-Toronto Scraper...')
     try:
         getResourses()
         availabilities = getAvalibilities()
@@ -444,8 +454,9 @@ def run():
         facilities = getGeoToFacilities(facilities)
         facilities = getPhoneUrlToFacilities(facilities)
         saveStaticDataToDB(availabilities, facilities)
+        logger.info('------------------------------------------------End------------------------------------------------')
     except Exception as e:
-        logging.warning(e)
+        logger.warning(e)
 
 
 run()
