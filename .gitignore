@@ -1,0 +1,9 @@
+bin/*
+env/*
+include/*
+lib/*
+results/*
+publickey
+publickey.pub
+.env
+*.log
