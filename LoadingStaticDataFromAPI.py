@@ -148,7 +148,7 @@ def getGeoToFacilities(facilities):
                 facility['postal_code'] = response['results'][0]['address_components'][-1]['short_name']
         return facilities
     except (Exception) as e:
-        logger.error(e)
+        logger.warning(e)
 
 
 def getPhoneUrlToFacilities(facilities):
@@ -431,16 +431,16 @@ def setuplogger():
     logger.setLevel(args.loglevel.upper())
 
     formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(message)s', '%Y-%m-%d %H:%M:%S')
+
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
+
     file_handler = logging.FileHandler('logs.log')
     file_handler.setFormatter(formatter)
-    # logger.basicConfig(format='%(asctime)s %(levelname)-8s %(message)s',
-    #                    level=args.loglevel.upper(),
-    #                    datefmt='%Y-%m-%d %H:%M:%S')
-    logger.info('logger now setup.')
-
-    # file_handler.setLevel(logger.DEBUG)
-    # file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
+
+    logger.info('Setup loggers')
 
 
 def run():
