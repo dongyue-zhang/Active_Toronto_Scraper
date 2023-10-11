@@ -3,19 +3,19 @@ CREATE DATABASE IF NOT EXISTS `active_v2`;
 USE active_v2;
 SET TIME_ZONE='-05:00';
 
-DROP TABLE IF EXISTS `facility_activity`;
+DROP TABLE IF EXISTS `reference_facility_locationorigin`;
 DROP TABLE IF EXISTS `language_translation`;
+DROP TABLE IF EXISTS `language`;
+DROP TABLE IF EXISTS `facility_activity`;
 DROP TABLE IF EXISTS `availability`;
-DROP TABLE IF EXISTS `facility_hours`;
+DROP TABLE IF EXISTS `facility`;
+DROP TABLE IF EXISTS `address`;
 DROP TABLE IF EXISTS `activity`;
 DROP TABLE IF EXISTS `type`;
 DROP TABLE IF EXISTS `category`;
-DROP TABLE IF EXISTS `facility`;
-DROP TABLE IF EXISTS `city`;
-DROP TABLE IF EXISTS `location`;
-DROP TABLE IF EXISTS `address`;
 DROP TABLE IF EXISTS `translation`;
-DROP TABLE IF EXISTS `language`;
+DROP TABLE IF EXISTS `city`;
+
 
 -- Table structure for table `language`
 --
@@ -55,8 +55,8 @@ CREATE TABLE `address` (
   `PROVINCE` varchar(45) NOT NULL,
   `POSTAL_CODE` char(6) NOT NULL,
   `COUNTRY` varchar(45) NOT NULL,
-  `LONGITUDE` decimal NOT NULL,
-  `LATITUDE` decimal NOT NULL,
+  `LONGITUDE` double(8,6) NOT NULL,
+  `LATITUDE` double(8,6) NOT NULL,
   `LAST_UPDATED` DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`ID`),
   KEY `STREET_TRANSLATION_ID` (`STREET_TRANSLATION_ID`),
@@ -83,7 +83,18 @@ CREATE TABLE `facility` (
   CONSTRAINT `FACILITY_ibfk_3` FOREIGN KEY (`CITY_ID`) REFERENCES `city` (`ID`)
 ) ENGINE=InnoDB AUTO_INCREMENT=2001 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+
 --
+-- Table structure for table REFERENCE_FACILITY_LOCATIONORIGIN
+--
+CREATE TABLE `reference_facility_locationorigin` (
+  `FACILITY_ID` int NOT NULL,
+  `LOCATION_ID` int NOT NULL,
+  PRIMARY KEY (`FACILITY_ID`),
+  CONSTRAINT `REFERENCE_FACILITY_LOCATIONORIGIN_ibfk_1` FOREIGN KEY (`FACILITY_ID`) REFERENCES `facility` (`ID`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
 -- Table structure for table `CATEGORY`
 --
 CREATE TABLE `category` (
@@ -126,7 +137,7 @@ CREATE TABLE `activity` (
   KEY `TITLE_TRANSLATION_ID` (`TITLE_TRANSLATION_ID`),
   CONSTRAINT `ACTIVITY_ibfk_1` FOREIGN KEY (`TYPE_ID`) REFERENCES `type` (`ID`),
   CONSTRAINT `ACTIVITY_ibfk_2` FOREIGN KEY (`TITLE_TRANSLATION_ID`) REFERENCES `translation` (`ID`)
-) ENGINE=InnoDB AUTO_INCREMENT=2001 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=20001 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 --
 -- Table structure for table `availability`

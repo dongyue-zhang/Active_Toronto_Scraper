@@ -8,6 +8,7 @@ import ast
 from decouple import config
 from bs4 import BeautifulSoup
 from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
 import time
 import mysql.connector as MySQL
 import urllib.parse
@@ -21,7 +22,7 @@ PASSWORD = config('PASSWORD')
 DATABASE = config('DATABASE')
 GOOGLE_API_URL = 'https://maps.googleapis.com/maps/api/geocode/json?address='
 PROVINCE = 'Ontario'
-RESOURSE_API = 'https://ckan0.cf.opendata.inter.prod-toronto.ca/api/3/action/package_show?id=da46e4ac-d4ab-4b1c-b139-6362a0a43b3c'
+RESOURCE_API = 'https://ckan0.cf.opendata.inter.prod-toronto.ca/api/3/action/package_show?id=da46e4ac-d4ab-4b1c-b139-6362a0a43b3c'
 FACILITY_LIST_URL = 'https://www.toronto.ca/data/parks/prd/facilities/recreationcentres/index.html'
 CITY_OF_TORONTO_URL = 'https://www.toronto.ca'
 FACILITY_URL_PREFIX = 'https://www.toronto.ca/data/parks/prd/facilities/complex/'
@@ -31,39 +32,39 @@ FACILITIES = 'Facilities.json'
 REGISTERED_PROGRAMS = 'Registered Programs.json'
 
 
-def getResourses():
+def getResources():
     global dropins, facilities, locations, registeredPrograms
     params = {'key': 'value'}
 
-    logger.info('Requesting resourses from City of Toronto OpenAPI: ' + RESOURSE_API)
+    logger.info('Requesting resources from City of Toronto OpenAPI: ' + RESOURCE_API)
     try:
-        r = requests.get(url=RESOURSE_API, params=params)
+        r = requests.get(url=RESOURCE_API, params=params)
         response = r.json()
     except (ConnextionError, Exception) as e:
-        logger.warning(('Could not get resourses from {}:'.format(RESOURSE_API)))
+        logger.warning(('Could not get resources from {}:'.format(RESOURCE_API)))
         logger.warning(e)
 
     try:
-        resoursesJSON = response['result']['resources']
-        resourses = {}
-        for resourseJSON in resoursesJSON:
-            name = resourseJSON['name']
-            url = resourseJSON['url']
+        resources = response['result']['resources']
+        resources_dict = {}
+        for resource in resources:
+            name = resource['name']
+            url = resource['url']
 
-            if resourseJSON['name'] in [DROPIN, FACILITIES, REGISTERED_PROGRAMS]:
-                logger.info('Getting sourse file: ' + resourseJSON['name'])
+            if resource['name'] in [DROPIN, FACILITIES, REGISTERED_PROGRAMS]:
+                logger.info('Getting source file: ' + resource['name'])
                 content = requests.get(url=url, params=params).json()
-                resourses[name] = content
-            elif resourseJSON['name'] == LOCATIONS:
-                logger.info('Getting sourse file: ' + resourseJSON['name'])
+                resources_dict[name] = content
+            elif resource['name'] == LOCATIONS:
+                logger.info('Getting source file: ' + resource['name'])
                 csv = requests.get(url=url, params=params).content
-                locations = pd.read_csv(io.StringIO(
-                    csv.decode('utf-8')), sep=',', header=0)
+                locations = pd.read_csv(io.StringIO(csv.decode('utf-8')), sep=',', header=0)
+                # fill NaN values with ''
                 locations = locations.fillna('')
 
-        dropins = resourses[DROPIN]
-        facilities = resourses[FACILITIES]
-        registeredPrograms = resourses[REGISTERED_PROGRAMS]
+        dropins = resources_dict[DROPIN]
+        facilities = resources_dict[FACILITIES]
+        registeredPrograms = resources_dict[REGISTERED_PROGRAMS]
     except (Exception) as e:
         logger.warning(e)
 
@@ -97,9 +98,7 @@ def getAvalibilities():
             avalibility['end_time'] = endDatetimeStr
             avalibility['category'] = dropin['Category']
             avalibilities.append(avalibility)
-        sorted(avalibilities, key=lambda x: x['course_title'])
-        sorted(avalibilities, key=lambda x: x['type'])
-        sorted(avalibilities, key=lambda x: x['category'])
+        avalibilities = sorted(avalibilities, key=lambda x: (x['category'], x['type'], x['course_title'], x['location_id']))
         return avalibilities
     except (Exception) as e:
         logger.warning(e)
@@ -112,7 +111,7 @@ def getOriginalFacilities(availablities):
             items=['Location ID', 'Location Name', 'District', 'Street No', 'Street No Suffix', 'Street Name', 'Street Type', 'Postal Code']).values.tolist()
 
         locationIDs = set()
-        locationsNoGeo = []
+        facilitiesNoGeo = []
 
         for availablity in availablities:
             locationID = availablity['location_id']
@@ -122,10 +121,10 @@ def getOriginalFacilities(availablities):
             for locat in locationList:
                 if locationID == locat[0]:
                     street = str(locat[3]) + str(locat[4]) + ' ' + str(locat[5]) + ' ' + str(locat[6])
-                    locationsNoGeo.append(
+                    facilitiesNoGeo.append(
                         {'location_id': locat[0], 'facility_name': locat[1], 'city': locat[2], 'street': street, 'province': PROVINCE, 'postal_code': locat[7], 'phone': None, 'url': None})
 
-        return locationsNoGeo
+        return facilitiesNoGeo
     except (Exception) as e:
         logger.warning(e)
 
@@ -157,12 +156,14 @@ def getPhoneUrlToFacilities(facilities):
         # get recreation list
         logger.info('Getting recreation list from {}'.format(FACILITY_LIST_URL))
         option = webdriver.ChromeOptions()
+        service = Service()
         option.add_argument('headless')
-        driver = webdriver.Chrome(options=option)
+        driver = webdriver.Chrome(service=service, options=option)
         driver.get(FACILITY_LIST_URL)
         time.sleep(1)
         html = driver.page_source.encode('utf-8')
         driver.quit()
+
         soup = BeautifulSoup(html, 'lxml')
         table = soup.find('div', attrs={'class': 'pfrListing'})
         trs = table.table.tbody.find_all('tr')
@@ -201,7 +202,7 @@ def getPhoneUrlToFacilities(facilities):
         logger.warning(e)
 
 
-def saveStaticDataToDB(availablities, facilities):
+def insert_data_to_empty_db(availablities, facilities):
     # primary keys for tables
     language_id = 'En'
     city_id = 2
@@ -212,14 +213,14 @@ def saveStaticDataToDB(availablities, facilities):
     address_id = ''
     facility_id = ''
 
-    # control varialbles for iteration
+    # control varialbles for iterations
     category = ''
     type = ''
     activity = ''
     facility = ''
     country = 'Canada'
 
-    # counting row affected in tables
+    # row affected counting for insertions
     row_affected_traslation = 0
     row_affected_language_traslation = 0
     row_affected_facility = 0
@@ -229,6 +230,7 @@ def saveStaticDataToDB(availablities, facilities):
     row_affected_availability = 0
     row_affected_address = 0
     row_affected_activity_facility = 0
+    row_affected_reference_facility_locationorigin = 0
 
     # inserting sql staments
     TRANSLATION_SQL = 'INSERT INTO `translation` () VALUES();'
@@ -240,6 +242,8 @@ def saveStaticDataToDB(availablities, facilities):
     AVAILABILITY_SQL = 'INSERT INTO `availability` (`FACILITY_ID`, `ACTIVITY_ID`, `START_TIME`, `END_TIME`, `MIN_AGE`, `MAX_AGE`) VALUES (%s, %s, %s, %s, %s, %s);'
     ADDRESS_SQL = 'INSERT INTO `address` ( `STREET_TRANSLATION_ID`, `CITY`, `PROVINCE`, `POSTAL_CODE`, `COUNTRY`, `LATITUDE`, `LONGITUDE`) VALUES (%s, %s, %s, %s, %s, %s, %s);'
     FACILITY_SQL = 'INSERT INTO `facility` (`PHONE`, `ADDRESS_ID`, `TITLE_TRANSLATION_ID`, `URL`, `CITY_ID`) VALUES (%s, %s, %s, %s, %s);'
+    REFERENCE_FACILITY_LOCATIONORIGIN_SQL = 'INSERT INTO `reference_facility_locationorigin` (`FACILITY_ID`, `LOCATION_ID`) VALUES (%s, %s);'
+    FIND_FACILITY_SQL = 'SELECT facility.id FROM `facility` INNER JOIN `translation` INNER JOIN `language_translation` WHERE decription =  %s'
 
     logger.info('Connecting to MySQL...')
     try:
@@ -250,6 +254,62 @@ def saveStaticDataToDB(availablities, facilities):
             database=DATABASE
         )
 
+        for facility in facilities:
+            facility_name = facility['facility_name']
+            street = facility['street']
+            city = facility['city']
+            province = facility['province']
+            postal_code = facility['postal_code'].replace(' ', '')
+            lat = facility['lat']
+            lng = facility['lng']
+            phone = facility['phone']
+            url = facility['url']
+            location_id = facility['location_id']
+
+            # insert a new row into Table Translation
+            translation_id = executeInsertSQL(TRANSLATION_SQL, None, mydb)
+            row_affected_traslation += 1
+            logger.info('Inserted a new Translation: ' + str(translation_id))
+
+            # insert a new row into Table Language_Translation
+            language_translation_val = (translation_id, language_id, street)
+            executeInsertSQL(LANGUAGE_TRANSLATION_SQL, language_translation_val, mydb)
+            row_affected_language_traslation += 1
+            logger.info('Inserted a new Language_Translation: ' + street)
+
+            # insert a new row into Table Address
+            address_val = (translation_id, city, province, postal_code, country, lat, lng)
+            address_id = executeInsertSQL(ADDRESS_SQL, address_val, mydb)
+            row_affected_address += 1
+            logger.info('Inserted a new Address: ' + str(address_id))
+
+            # insert a new row into Table Translation
+            translation_id = executeInsertSQL(TRANSLATION_SQL, None, mydb)
+            row_affected_traslation += 1
+            logger.info('Inserted a new Translation: ' + str(translation_id))
+
+            # insert a new row into Table Language_Translation
+            language_translation_val = (translation_id, language_id, facility_name)
+            executeInsertSQL(LANGUAGE_TRANSLATION_SQL, language_translation_val, mydb)
+            row_affected_language_traslation += 1
+            logger.info('Inserted a new Language_Translation: ' + facility_name)
+
+            # insert a new row into Table Facility
+            facility_val = (phone, address_id, translation_id, url, city_id)
+            facility_id = executeInsertSQL(FACILITY_SQL, facility_val, mydb)
+            row_affected_facility += 1
+            logger.info('Inserted a new Facility: ' + str(facility_id))
+
+            # insert a new row into Table Reference_Facility_Locationorigin
+            reference_facility_locationorigin_val = (facility_id, location_id)
+            executeInsertSQL(REFERENCE_FACILITY_LOCATIONORIGIN_SQL, reference_facility_locationorigin_val, mydb)
+            row_affected_reference_facility_locationorigin += 1
+            logger.info('Insert a new Reference_Facility_Locationorigin: ' + str(facility_id))
+
+            facility['facility_id'] = facility_id
+
+            # facility = facility_current
+
         for availablity in availablities:
             # get current values
             category_current = availablity['category']
@@ -257,56 +317,66 @@ def saveStaticDataToDB(availablities, facilities):
             activity_current = availablity['course_title']
             facility_current = availablity['location_id']
 
+            for facility in facilities:
+                if facility['location_id'] == facility_current:
+                    facility_id = facility['facility_id']
+
             # insertion of new facilities
-            if facility_current != facility:
-                # retrieve facility info for the avaibility from facilities
-                for facility in facilities:
-                    if facility['location_id'] == facility_current:
-                        facility_name = facility['facility_name']
-                        street = facility['street']
-                        city = facility['city']
-                        province = facility['province']
-                        postal_code = facility['postal_code'].replace(' ', '')
-                        lat = facility['lat']
-                        lng = facility['lng']
-                        phone = facility['phone']
-                        url = facility['url']
+            # if facility_current != facility:
+            #     # retrieve facility info for the avaibility from facilities
+            #     for facility in facilities:
+            #         if facility['location_id'] == facility_current:
+            #             facility_name = facility['facility_name']
+            #             street = facility['street']
+            #             city = facility['city']
+            #             province = facility['province']
+            #             postal_code = facility['postal_code'].replace(' ', '')
+            #             lat = facility['lat']
+            #             lng = facility['lng']
+            #             phone = facility['phone']
+            #             url = facility['url']
 
-                # insert a new row into Table Translation
-                translation_id = executeInsertSQL(TRANSLATION_SQL, None, mydb)
-                row_affected_traslation += 1
-                logger.info('Inserted a new Translation: ' + str(translation_id))
+            #     # insert a new row into Table Translation
+            #     translation_id = executeInsertSQL(TRANSLATION_SQL, None, mydb)
+            #     row_affected_traslation += 1
+            #     logger.info('Inserted a new Translation: ' + str(translation_id))
 
-                # insert a new row into Table Language_Translation
-                language_translation_val = (translation_id, language_id, street)
-                executeInsertSQL(LANGUAGE_TRANSLATION_SQL, language_translation_val, mydb)
-                row_affected_language_traslation += 1
-                logger.info('Inserted a new Language_Translation: ' + street)
+            #     # insert a new row into Table Language_Translation
+            #     language_translation_val = (translation_id, language_id, street)
+            #     executeInsertSQL(LANGUAGE_TRANSLATION_SQL, language_translation_val, mydb)
+            #     row_affected_language_traslation += 1
+            #     logger.info('Inserted a new Language_Translation: ' + street)
 
-                # insert a new row into Table Address
-                address_val = (translation_id, city, province, postal_code, country, lat, lng)
-                address_id = executeInsertSQL(ADDRESS_SQL, address_val, mydb)
-                row_affected_address += 1
-                logger.info('Inserted a new Address: ' + str(address_id))
+            #     # insert a new row into Table Address
+            #     address_val = (translation_id, city, province, postal_code, country, lat, lng)
+            #     address_id = executeInsertSQL(ADDRESS_SQL, address_val, mydb)
+            #     row_affected_address += 1
+            #     logger.info('Inserted a new Address: ' + str(address_id))
 
-                # insert a new row into Table Translation
-                translation_id = executeInsertSQL(TRANSLATION_SQL, None, mydb)
-                row_affected_traslation += 1
-                logger.info('Inserted a new Translation: ' + str(translation_id))
+            #     # insert a new row into Table Translation
+            #     translation_id = executeInsertSQL(TRANSLATION_SQL, None, mydb)
+            #     row_affected_traslation += 1
+            #     logger.info('Inserted a new Translation: ' + str(translation_id))
 
-                # insert a new row into Table Language_Translation
-                language_translation_val = (translation_id, language_id, facility_name)
-                executeInsertSQL(LANGUAGE_TRANSLATION_SQL, language_translation_val, mydb)
-                row_affected_language_traslation += 1
-                logger.info('Inserted a new Language_Translation: ' + facility_name)
+            #     # insert a new row into Table Language_Translation
+            #     language_translation_val = (translation_id, language_id, facility_name)
+            #     executeInsertSQL(LANGUAGE_TRANSLATION_SQL, language_translation_val, mydb)
+            #     row_affected_language_traslation += 1
+            #     logger.info('Inserted a new Language_Translation: ' + facility_name)
 
-                # insert a new row into Table Facility
-                facility_val = (phone, address_id, translation_id, url, city_id)
-                facility_id = executeInsertSQL(FACILITY_SQL, facility_val, mydb)
-                row_affected_facility += 1
-                logger.info('Inserted a new Facility: ' + str(facility_id))
+            #     # insert a new row into Table Facility
+            #     facility_val = (phone, address_id, translation_id, url, city_id)
+            #     facility_id = executeInsertSQL(FACILITY_SQL, facility_val, mydb)
+            #     row_affected_facility += 1
+            #     logger.info('Inserted a new Facility: ' + str(facility_id))
 
-                facility = facility_current
+            #     # insert a new row into Table Reference_Facility_Locationorigin
+            #     reference_facility_locationorigin_val = (facility_id, facility_current)
+            #     executeInsertSQL(REFERENCE_FACILITY_LOCATIONORIGIN_SQL, reference_facility_locationorigin_val, mydb)
+            #     row_affected_reference_facility_locationorigin += 1
+            #     logger.info('Insert a new Reference_Facility_Locationorigin: ' + str(facility_id))
+
+            #     facility = facility_current
 
             # insertion of categories
             if category_current != category:
@@ -440,22 +510,24 @@ def setuplogger():
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
 
-    logger.info('Setup loggers')
+    logger.info('Loggers setup')
 
 
 def run():
     setuplogger()
     logger.info('Start running Active-Toronto Scraper...')
     try:
-        getResourses()
+        getResources()
         availabilities = getAvalibilities()
         facilities = getOriginalFacilities(availabilities)
         facilities = getGeoToFacilities(facilities)
         facilities = getPhoneUrlToFacilities(facilities)
-        saveStaticDataToDB(availabilities, facilities)
+        # writeListToTxt("facilities", "w", facilities)
+        insert_data_to_empty_db(availabilities, facilities)
         logger.info('------------------------------------------------End------------------------------------------------')
     except Exception as e:
         logger.warning(e)
 
 
-run()
+if __name__ == '__main__':
+    run()
