@@ -3,15 +3,12 @@ import json
 from datetime import datetime
 import os
 import io
-import pandas as pd
-import ast
 from decouple import config
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 import time
 import mysql.connector as MySQL
-import urllib.parse
 import logging
 import argparse
 
@@ -320,63 +317,6 @@ def insert_data_to_empty_db(availablities, facilities):
             for facility in facilities:
                 if facility['location_id'] == facility_current:
                     facility_id = facility['facility_id']
-
-            # insertion of new facilities
-            # if facility_current != facility:
-            #     # retrieve facility info for the avaibility from facilities
-            #     for facility in facilities:
-            #         if facility['location_id'] == facility_current:
-            #             facility_name = facility['facility_name']
-            #             street = facility['street']
-            #             city = facility['city']
-            #             province = facility['province']
-            #             postal_code = facility['postal_code'].replace(' ', '')
-            #             lat = facility['lat']
-            #             lng = facility['lng']
-            #             phone = facility['phone']
-            #             url = facility['url']
-
-            #     # insert a new row into Table Translation
-            #     translation_id = executeInsertSQL(TRANSLATION_SQL, None, mydb)
-            #     row_affected_traslation += 1
-            #     logger.info('Inserted a new Translation: ' + str(translation_id))
-
-            #     # insert a new row into Table Language_Translation
-            #     language_translation_val = (translation_id, language_id, street)
-            #     executeInsertSQL(LANGUAGE_TRANSLATION_SQL, language_translation_val, mydb)
-            #     row_affected_language_traslation += 1
-            #     logger.info('Inserted a new Language_Translation: ' + street)
-
-            #     # insert a new row into Table Address
-            #     address_val = (translation_id, city, province, postal_code, country, lat, lng)
-            #     address_id = executeInsertSQL(ADDRESS_SQL, address_val, mydb)
-            #     row_affected_address += 1
-            #     logger.info('Inserted a new Address: ' + str(address_id))
-
-            #     # insert a new row into Table Translation
-            #     translation_id = executeInsertSQL(TRANSLATION_SQL, None, mydb)
-            #     row_affected_traslation += 1
-            #     logger.info('Inserted a new Translation: ' + str(translation_id))
-
-            #     # insert a new row into Table Language_Translation
-            #     language_translation_val = (translation_id, language_id, facility_name)
-            #     executeInsertSQL(LANGUAGE_TRANSLATION_SQL, language_translation_val, mydb)
-            #     row_affected_language_traslation += 1
-            #     logger.info('Inserted a new Language_Translation: ' + facility_name)
-
-            #     # insert a new row into Table Facility
-            #     facility_val = (phone, address_id, translation_id, url, city_id)
-            #     facility_id = executeInsertSQL(FACILITY_SQL, facility_val, mydb)
-            #     row_affected_facility += 1
-            #     logger.info('Inserted a new Facility: ' + str(facility_id))
-
-            #     # insert a new row into Table Reference_Facility_Locationorigin
-            #     reference_facility_locationorigin_val = (facility_id, facility_current)
-            #     executeInsertSQL(REFERENCE_FACILITY_LOCATIONORIGIN_SQL, reference_facility_locationorigin_val, mydb)
-            #     row_affected_reference_facility_locationorigin += 1
-            #     logger.info('Insert a new Reference_Facility_Locationorigin: ' + str(facility_id))
-
-            #     facility = facility_current
 
             # insertion of categories
             if category_current != category:
